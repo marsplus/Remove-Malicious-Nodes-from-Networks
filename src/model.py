@@ -44,21 +44,17 @@ def cal_removal_loss(subset, G, weights):
 
 
 def rounding(X, augmented=True):
-    # instead of using Cholesky decomposition
-    # we use LDL decomposition here
+    # Cholesky decomposition is for positive definite matrices
+    # So we use LDL decomposition here
     m = X.shape[0]
     epsilon = 1e-8
     lu, d, perm = scilin.ldl(X)
-    # perm is to transform lu to a lower-triangular matrix
-    # lu = lu[perm, :]
     d[d < epsilon] = 0
     assert(np.all(d >= 0))
-    # d = d[perm, :]
-    # V = scilin.sqrtm(d).dot(lu.T)
     d_sqroot = np.diag(np.sqrt(np.diag(d)))
     V = d_sqroot.dot(lu.T)
 
-    # sample a standard gaussian vector
+    # sample  standard gaussian vectors
     numSample = 10000
     x = 0
     for ii in range(numSample):
