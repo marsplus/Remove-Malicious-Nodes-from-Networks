@@ -31,11 +31,12 @@ mkdir result/
 
 ### Reference
 ```
-@inproceedings{tong2018adversarial,
-  title={Adversarial Regression with Multiple Learners},
-  author={Tong, Liang and Yu, Sixie and Alfeld, Scott and others},
-  booktitle={International Conference on Machine Learning},
-  pages={4953--4961},
-  year={2018}
+@inproceedings{yu2019removing,
+  title={Removing malicious nodes from networks},
+  author={Yu, Sixie and Vorobeychik, Yevgeniy},
+  booktitle={Proceedings of the 18th International Conference on Autonomous Agents and MultiAgent Systems},
+  pages={314--322},
+  year={2019},
+  organization={International Foundation for Autonomous Agents and Multiagent Systems}
 }
 ```
