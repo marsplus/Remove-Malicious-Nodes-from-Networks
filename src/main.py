@@ -75,7 +75,7 @@ def simulateSignalInGraph(G, malicious_ratio, dataPath, trainSize, std_):
 
     for node in malicious_nodes:
         signals = clf.predict_proba(malicious_data.loc[node].values.reshape(1, -1)).squeeze()[1]
-        G.node[node]['detectionSignals'] = signals
+        G.nodes[node]['detectionSignals'] = signals
         evaluationSignals = clf_eval.predict_proba(malicious_data.loc[node].values.reshape(1, -1)).squeeze()[1]
         noise = np.random.normal(scale=standard_deviation)
         if evaluationSignals + noise > 0.9999:
@@ -84,7 +84,7 @@ def simulateSignalInGraph(G, malicious_ratio, dataPath, trainSize, std_):
             evaluationSignals = 0.0001
         else:
             evaluationSignals += noise
-        G.node[node]['evaluationSignals'] = evaluationSignals
+        G.nodes[node]['evaluationSignals'] = evaluationSignals
 
     benign_nodes = list(set(G.nodes()) - set(malicious_nodes))
     numBenignNodes = len(benign_nodes)
@@ -98,7 +98,7 @@ def simulateSignalInGraph(G, malicious_ratio, dataPath, trainSize, std_):
 
     for node in benign_nodes:
         signals = clf.predict_proba(benign_data.loc[node].values.reshape(1, -1)).squeeze()[1]
-        G.node[node]['detectionSignals'] = signals
+        G.nodes[node]['detectionSignals'] = signals
         evaluationSignals = clf_eval.predict_proba(benign_data.loc[node].values.reshape(1, -1)).squeeze()[1] 
         noise = np.random.normal(scale=standard_deviation)
         if evaluationSignals + noise > 0.9999:
@@ -107,7 +107,7 @@ def simulateSignalInGraph(G, malicious_ratio, dataPath, trainSize, std_):
             evaluationSignals = 0.0001
         else:
             evaluationSignals += noise
-        G.node[node]['evaluationSignals'] = evaluationSignals
+        G.nodes[node]['evaluationSignals'] = evaluationSignals
 
     return (G, malicious_nodes, benign_nodes)
 
@@ -123,7 +123,7 @@ def dispatchFunc_smart(arg_list):
     G, malicious_ratio, dataPath, trainSize, optTH, rho, weightFactors, Algo = arg_list
     G, malicious_nodes, benign_nodes = simulateSignalInGraph(G, malicious_ratio, dataPath, trainSize, std_)
     allNodes = G.nodes()
-    averageDetectionSignals = [np.mean(G.node[i]['detectionSignals']) for i in allNodes]
+    averageDetectionSignals = [np.mean(G.nodes[i]['detectionSignals']) for i in allNodes]
     if Algo.__name__ == 'LESS':
         our_ret = Algo(averageDetectionSignals, G, rho, weightFactors)
     elif Algo.__name__ == 'MINT':
@@ -175,9 +175,10 @@ def generateGraphData(numExp, graph_type, batch, dataPath, trainSize):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('graph_type', type=str)
-    parser.add_argument('batch', type=int)
-    parser.add_argument('numExp', type=int)
+    parser.add_argument('--graph_type', type=str)
+    parser.add_argument('--batch', type=int)
+    parser.add_argument('--numExp', type=int, default=50)
+    parser.add_argument('--numCPU', type=int, default=30)
     args = parser.parse_args()
     graph_type, batch, numExp = args.graph_type, args.batch, args.numExp
 
@@ -185,7 +186,7 @@ if __name__ == '__main__':
     malicious_ratio = 0.1
     trainSize = 0.3
     dataPath = 'data/spambase.data' if graph_type in ['BA', 'Small-World'] else 'data/hate_speech.csv'
-    rho = 15
+    rho = 20
     FPR_weight = 0.5
     optTH = selectThreshold(FPR_weight, dataPath)
     
@@ -203,7 +204,7 @@ if __name__ == '__main__':
     ###################################################################################
     for key, value in weightFactor_dict.items():
         ret = {'MINT': [], 'baseline': [], 'LESS': []}
-        pool = Pool(processes=numCPU-1)
+        pool = Pool(processes=numCPU)
         all_args = []
 
         for ii in range(numExp):
@@ -222,18 +223,18 @@ if __name__ == '__main__':
         baseline_ret = pool.map(dispatchFunc_smart, all_args)
         ret['baseline'] = [item[1] for item in baseline_ret]
 
-        ###################################################################################
-        ## LESS ###
-        if graph_type != 'Facebook':
-           for ii in range(numExp):
-               all_args[ii][-1] = LESS
-           LESS_ret = pool.map(dispatchFunc_smart, all_args)
-           ret['LESS'] = [item[1] for item in LESS_ret]
+        ####################################################################################
+        #### LESS ###
+        #if graph_type != 'Facebook':
+        #   for ii in range(numExp):
+        #       all_args[ii][-1] = LESS
+        #   LESS_ret = pool.map(dispatchFunc_smart, all_args)
+        #   ret['LESS'] = [item[1] for item in LESS_ret]
 
-        fidName = os.path.join('result', '%s_boxplot_data_%s_%i.p' % (graph_type, key, batch))
-        with open(fidName, 'wb') as fid:
-            pickle.dump(ret, fid)
-
+        fidName = os.path.join('result', '{}_boxplot_data_{}_{}.txt'.format(graph_type, key, batch))
+        with open(fidName, 'w') as fid:
+            for nExp in range(args.numExp):
+                fid.write("{}   {}\n".format(ret['MINT'][nExp], ret['baseline'][nExp]))
         ###################################################################################
         pool.close()
         pool.join()

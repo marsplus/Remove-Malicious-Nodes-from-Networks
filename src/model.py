@@ -15,7 +15,7 @@ from sklearn.linear_model import LogisticRegressionCV
 def cal_removal_loss(subset, G, weights):
     n = len(G)
     remainNodes = list(set(G.nodes()) - set(subset))
-    evaluationSignals = [np.mean(G.node[idx]['evaluationSignals']) for idx in range(n)]
+    evaluationSignals = [np.mean(G.nodes[idx]['evaluationSignals']) for idx in range(n)]
 
     removal_loss = 0
     totalLoss = [0, 0, 0]
@@ -26,15 +26,17 @@ def cal_removal_loss(subset, G, weights):
 
     ## loss for the third term (false-negatives)
     for n in remainNodes:
-        totalLoss[2] += evaluationSignals[n]
+        neighborhood = G.neighbors(n)
+        for neigh in neighborhood:
+            if neigh in remainNodes:
+                totalLoss[2] += evaluationSignals[n] * (1 - evaluationSignals[neigh])
 
     ## loss for the second term
     for n in subset:
         neighborhood = G.neighbors(n) 
         for neigh in neighborhood:
-            if neigh not in remainNodes:
-                continue
-            totalLoss[1] += (1 - evaluationSignals[n]) * (1 - evaluationSignals[neigh])
+            if neigh in remainNodes:
+                totalLoss[1] += (1 - evaluationSignals[n]) * (1 - evaluationSignals[neigh])
 
     removal_loss = np.sum([totalLoss[idx] * weights[idx] for idx in range(len(totalLoss))])
     return removal_loss
@@ -59,10 +61,13 @@ def rounding(X, augmented=True):
     x = 0
     for ii in range(numSample):
         z = np.random.multivariate_normal(np.zeros(m), np.identity(m))
-        x += np.sign(V.T.dot(z))
+        assert(np.sum(z) != 0)
+        z /= lin.norm(z)
+        x += V.T.dot(z)
+    ## compute the expectation
     x /= numSample
-    x = np.sign(x)
 
+    x = np.sign(x)
     if augmented:
         if x[-1] == -1:
             x_opt = -1 * x[:-1]
@@ -96,17 +101,17 @@ def MINT(signal, G, weightFactors):
 
     ## 
     Q = (alpha_3/2)*(M + M.T) - (alpha_2/2) * (P + P.T)
-    b = (alpha_1/2) * B * all_one 
+    #b = (alpha_1/2) * B * all_one
+    b = alpha_1 * B * all_one + alpha_2 * P * all_one - alpha_3 * M * all_one - alpha_3 * M.T * all_one
 
-    Q_hat = np.bmat([[Q, b], [b.T, np.matrix(0)]])
+    Q_hat = np.bmat([[(1/4)*Q, (1/4)*(Q*all_one + b)], [(1/4)*(all_one.T*Q + b.T), np.matrix(0)]])
     X_opt = cvx.Variable((n+1, n+1), symmetric=True)
 
     obj = cvx.trace(Q_hat * X_opt)
     constraints = [X_opt >> 0,
                    cvx.reshape(cvx.diag(X_opt), (n+1, 1)) == 1]
     prob = cvx.Problem(cvx.Minimize(obj), constraints)
-    prob.solve(solver=cvx.SCS, verbose=True)
-
+    prob.solve(solver=cvx.SCS, verbose=True) 
     x_opt = rounding(X_opt.value)
     our_subset = np.where(x_opt > 0.0)[0]
     MINT_loss = cal_removal_loss(our_subset, G, weightFactors)
@@ -137,11 +142,11 @@ def LESS(signal, G,  rho, weightFactors):
                        cvx.sum(x_opt) <= t,
                        cvx.norm(cvx.pos(v), 1) <= rho]
         prob = cvx.Problem(cvx.Maximize(obj), constraints)
-        try:
-            prob.solve(solver=cvx.CVXOPT)
-        except:
-            print("Cannot solve! because: ", prob.status)
-            continue
+        #try:
+        prob.solve(solver=cvx.SCS)
+        #except:
+        #    print("Cannot solve! because: ", prob.status)
+        #    continue
 
         if obj.value > current_obj:
             current_obj = obj.value
